@@ -23,11 +23,12 @@
 
     <dependencies>
 
-        <!-- Hadoop, MapReduce, HDFS e YARN -->
+        <!-- API Hadoop, MapReduce, HDFS e YARN -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
             <version>${hadoop.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Test -->
@@ -53,6 +54,7 @@
                 </configuration>
             </plugin>
 
+            <!-- Specifica la classe principale nel JAR -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -60,19 +62,10 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>
-                                retailsimilarity.RetailSimilarityDriver
-                            </mainClass>
+                            <mainClass>retailsimilarity.App</mainClass>
                         </manifest>
                     </archive>
-                </configuration
-            </plugin>
-
-            <!-- Permette di eseguire il progetto localmente con Maven -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
+                </configuration>
             </plugin>
 
         </plugins>
