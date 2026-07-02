@@ -1,4 +1,4 @@
-package it.unipi.cloud;
+package retailsimilarity;
 
 import junit.framework.Test;
 import junit.framework.TestCase;
