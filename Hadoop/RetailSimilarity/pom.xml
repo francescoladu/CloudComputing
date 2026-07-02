@@ -43,7 +43,7 @@
 
     <build>
         <plugins>
-
+            <!-- comment flag -->
             <!-- Genera bytecode compatibile con Java 8 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
