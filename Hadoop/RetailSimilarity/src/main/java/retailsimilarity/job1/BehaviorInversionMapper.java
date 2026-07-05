@@ -2,7 +2,6 @@ package retailsimilarity.job1;
 
 import java.io.IOException;
 import java.util.Locale;
-import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
@@ -39,7 +38,6 @@ public class BehaviorInversionMapper extends Mapper<
     private int behaviorIndex;
 
     private boolean inputHasHeader;
-    private String delimiterRegex;
 
     private final ItemBehaviorWritable outputKey =
             new ItemBehaviorWritable();
@@ -63,7 +61,6 @@ public class BehaviorInversionMapper extends Mapper<
                 ","
         );
 
-        delimiterRegex = Pattern.quote(delimiter);
 
         userIdIndex = configuration.getInt(
                 "retailsimilarity.input.user.index",
@@ -102,7 +99,6 @@ public class BehaviorInversionMapper extends Mapper<
             return;
         }
 
-        String[] fields = line.split(delimiterRegex, -1);
 
         int requiredColumns = Math.max(
                 userIdIndex,
