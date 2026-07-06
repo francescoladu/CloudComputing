@@ -1,17 +1,22 @@
 package retailsimilarity.job2;
-
+ 
 import java.io.IOException;
-
+ 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Reducer;
-
+ 
 import retailsimilarity.writable.SimilarityWritable;
 import retailsimilarity.writable.UserPairWritable;
-
+ 
 /**
+ * Reducer of second job
+ *
+ * After the Shuffle and Sort phase, the reducer inherits a subset of of the total user pairs with the respective list of values
+ * The reducer sums up all the values for each user pair
+ *
  * Input:
  *
- * (user1, user2) -> [(buy, fav), ...]
+ * (user1, user2) -> [(buy_i, fav_i), (buy_j, fav_j), ...]
  *
  * Output:
  *
@@ -22,56 +27,59 @@ public class SimilarityReducer extends Reducer<
         SimilarityWritable,
         UserPairWritable,
         SimilarityWritable> {
-
+ 
     private long minimumBuySimilarity;
     private long minimumFavSimilarity;
-
+ 
     private final SimilarityWritable outputValue =
             new SimilarityWritable();
-
+ 
     /**
-     * Legge eventuali soglie configurabili.
+     * setup() function to configure min_sup tresholds to filter (key,value) pairs with small values
      *
-     * Con entrambe a zero vengono emesse tutte le coppie.
+     * If both tresholds == 0, then all pairs are accepted
      */
+ 
     @Override
     protected void setup(Context context) {
         Configuration configuration =
                 context.getConfiguration();
-
+ 
         minimumBuySimilarity = configuration.getLong(
                 "retailsimilarity.min.buy",
                 0L
         );
-
+ 
         minimumFavSimilarity = configuration.getLong(
                 "retailsimilarity.min.fav",
                 0L
         );
     }
-
+ 
     @Override
     protected void reduce(
             UserPairWritable key,
             Iterable<SimilarityWritable> values,
             Context context
     ) throws IOException, InterruptedException {
-
+ 
         long buySum = 0;
         long favSum = 0;
-
+ 
+        //cumulative sum
         for (SimilarityWritable value : values) {
             buySum += value.getBuyCount();
             favSum += value.getFavCount();
         }
-
+ 
+        //small values filtering
         if (buySum < minimumBuySimilarity
                 || favSum < minimumFavSimilarity) {
             return;
         }
-
+ 
         outputValue.set(buySum, favSum);
-
+ 
         context.write(key, outputValue);
     }
 }
