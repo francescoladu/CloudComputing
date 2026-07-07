@@ -9,21 +9,30 @@ import java.util.Collection;
 import org.apache.hadoop.io.Writable;
 
 /**
- * Contiene la lista ordinata degli utenti distinti
- * associati a uno specifico item e comportamento.
+ * Contains the ordered list of distinct users
+ * related to a specific item and behavior.
  */
 public class UserListWritable implements Writable {
 
     private long[] users;
 
+    /**
+     * Empty constructor required by Hadoop.
+     */
     public UserListWritable() {
         users = new long[0];
     }
 
+    /**
+     * Creates the user list from a collection.
+     */
     public UserListWritable(Collection<Long> users) {
         setUsers(users);
     }
 
+    /**
+     * Copies the users into an array and sorts them.
+     */
     public void setUsers(Collection<Long> userCollection) {
         users = new long[userCollection.size()];
 
@@ -45,6 +54,9 @@ public class UserListWritable implements Writable {
         return users.length;
     }
 
+    /**
+     * Serializes the list size and all user IDs.
+     */
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(users.length);
@@ -54,12 +66,17 @@ public class UserListWritable implements Writable {
         }
     }
 
+    /**
+     * Reads the list size and all user IDs.
+     */
     @Override
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
 
         if (size < 0) {
-            throw new IOException("Invalid user list size: " + size);
+            throw new IOException(
+                    "Invalid user list size: " + size
+            );
         }
 
         users = new long[size];
@@ -69,6 +86,9 @@ public class UserListWritable implements Writable {
         }
     }
 
+    /**
+     * Returns the user list in text format.
+     */
     @Override
     public String toString() {
         return Arrays.toString(users);
