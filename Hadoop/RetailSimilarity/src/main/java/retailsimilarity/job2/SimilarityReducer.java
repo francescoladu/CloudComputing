@@ -74,7 +74,7 @@ public class SimilarityReducer extends Reducer<
  
         //small values filtering
         if (buySum < minimumBuySimilarity
-                || favSum < minimumFavSimilarity) {
+                && favSum < minimumFavSimilarity) {
             return;
         }
  
