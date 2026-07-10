@@ -34,7 +34,7 @@ ssh root@10.1.1.112 'mkdir -p /root/retail_similarity/dataset'
 
 
 E Copiamo tutti i files 
-scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/job1/
+<scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/job1/>
 
 cd ../job2
 scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/job2/

@@ -1,4 +1,5 @@
 retailsimilarity/job1/BehaviorInversionMapper$InputCounters.class
+retailsimilarity/RetailSimilarityDriver.class
 retailsimilarity/job1/DistinctUsersReducer.class
 retailsimilarity/job1/DistinctUsersReducer$ItemCounters.class
 retailsimilarity/job1/BehaviorInversionMapper.class

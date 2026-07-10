@@ -1,5 +1,6 @@
 /mnt/c/Users/fra-l/Desktop/CloudComputing/Hadoop/RetailSimilarity/src/main/java/retailsimilarity/job2/SimilarityCombiner.java
 /mnt/c/Users/fra-l/Desktop/CloudComputing/Hadoop/RetailSimilarity/src/main/java/retailsimilarity/job1/DistinctUsersReducer.java
+/mnt/c/Users/fra-l/Desktop/CloudComputing/Hadoop/RetailSimilarity/src/main/java/retailsimilarity/RetailSimilarityDriver.java
 /mnt/c/Users/fra-l/Desktop/CloudComputing/Hadoop/RetailSimilarity/src/main/java/retailsimilarity/App.java
 /mnt/c/Users/fra-l/Desktop/CloudComputing/Hadoop/RetailSimilarity/src/main/java/retailsimilarity/writable/UserListWritable.java
 /mnt/c/Users/fra-l/Desktop/CloudComputing/Hadoop/RetailSimilarity/src/main/java/retailsimilarity/job2/PairGenerationMapper.java
