@@ -12,13 +12,13 @@ import org.apache.hadoop.io.WritableComparable;
  * It is composed by: (itemId, behavior)
  * behavior:
  * 1 = buy
- * 2 = fav
+ * 2 = pv
  */
 public class ItemBehaviorWritable
         implements WritableComparable<ItemBehaviorWritable> {
 
     public static final byte BUY = 1;
-    public static final byte FAV = 2;
+    public static final byte PV = 2;
 
     private long itemId;
     private byte behavior;
@@ -60,8 +60,8 @@ public class ItemBehaviorWritable
             return "buy";
         }
 
-        if (behavior == FAV) {
-            return "fav";
+        if (behavior == PV) {
+            return "pv";
         }
 
         return "unknown";

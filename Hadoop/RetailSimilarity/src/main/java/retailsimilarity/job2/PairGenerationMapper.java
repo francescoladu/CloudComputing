@@ -15,10 +15,10 @@ import retailsimilarity.writable.UserPairWritable;
  * Input (from reducer of the first job): (itemId, behavior) -> [distinct users]
  *
  * Output: (user1, user2) -> (1, 0) per buy
- *         (user1, user2) -> (0, 1) per fav
+ *         (user1, user2) -> (0, 1) per pv
  *
  *         (user1, user3) -> (0, 1) per buy
- *         (user1, user3) -> (0, 1) per fav
+ *         (user1, user3) -> (0, 1) per pv
  *
  *         ...
  *         ...
@@ -31,7 +31,7 @@ public class PairGenerationMapper extends Mapper<
  
     public enum PairCounters {
         GENERATED_BUY_PAIRS,
-        GENERATED_FAV_PAIRS
+        GENERATED_PV_PAIRS
     }
  
     private final UserPairWritable outputKey =
@@ -40,7 +40,7 @@ public class PairGenerationMapper extends Mapper<
     private final SimilarityWritable buyContribution =
             new SimilarityWritable(1, 0);
  
-    private final SimilarityWritable favContribution =
+    private final SimilarityWritable pvContribution =
             new SimilarityWritable(0, 1);
  
     @Override
@@ -72,7 +72,7 @@ public class PairGenerationMapper extends Mapper<
                         users[secondIndex]
                 );
  
-                // output value is either the SimilarityWritable buyContribution object or the SimilarityWritable favContribution object
+                // output value is either the SimilarityWritable buyContribution object or the SimilarityWritable pvContribution object
  
                 if (key.getBehavior()
                         == ItemBehaviorWritable.BUY) {
@@ -87,15 +87,15 @@ public class PairGenerationMapper extends Mapper<
                     ).increment(1);
  
                 } else if (key.getBehavior()
-                        == ItemBehaviorWritable.FAV) {
+                        == ItemBehaviorWritable.PV) {
  
                     context.write(
                             outputKey,
-                            favContribution
+                            pvContribution
                     );
  
                     context.getCounter(
-                            PairCounters.GENERATED_FAV_PAIRS
+                            PairCounters.GENERATED_PV_PAIRS
                     ).increment(1);
                 }
             }

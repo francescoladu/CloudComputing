@@ -16,11 +16,11 @@ import retailsimilarity.writable.UserPairWritable;
  *
  * Input:
  *
- * (user1, user2) -> [(buy_i, fav_i), (buy_j, fav_j), ...]
+ * (user1, user2) -> [(buy_i, pv_i), (buy_j, pv_j), ...]
  *
  * Output:
  *
- * (user1, user2) -> (commonBuy, commonFav)
+ * (user1, user2) -> (commonBuy, commonPv)
  */
 public class SimilarityReducer extends Reducer<
         UserPairWritable,
@@ -29,7 +29,7 @@ public class SimilarityReducer extends Reducer<
         SimilarityWritable> {
  
     private long minimumBuySimilarity;
-    private long minimumFavSimilarity;
+    private long minimumPvSimilarity;
  
     private final SimilarityWritable outputValue =
             new SimilarityWritable();
@@ -50,8 +50,8 @@ public class SimilarityReducer extends Reducer<
                 0L
         );
  
-        minimumFavSimilarity = configuration.getLong(
-                "retailsimilarity.min.fav",
+        minimumPvSimilarity = configuration.getLong(
+                "retailsimilarity.min.pv",
                 0L
         );
     }
@@ -64,21 +64,21 @@ public class SimilarityReducer extends Reducer<
     ) throws IOException, InterruptedException {
  
         long buySum = 0;
-        long favSum = 0;
+        long pvSum = 0;
  
         //cumulative sum
         for (SimilarityWritable value : values) {
             buySum += value.getBuyCount();
-            favSum += value.getFavCount();
+            pvSum += value.getPvCount();
         }
  
         //small values filtering
         if (buySum < minimumBuySimilarity
-                && favSum < minimumFavSimilarity) {
+                && pvSum < minimumPvSimilarity) {
             return;
         }
  
-        outputValue.set(buySum, favSum);
+        outputValue.set(buySum, pvSum);
  
         context.write(key, outputValue);
     }

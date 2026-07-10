@@ -39,6 +39,7 @@ public class DistinctUsersReducer extends Reducer<
     /**
      * Reads the maximum number of users allowed for one item.
      */
+    
     @Override
     protected void setup(Context context) {
         Configuration configuration =

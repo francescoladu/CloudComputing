@@ -11,12 +11,12 @@ import org.apache.hadoop.io.Writable;
  * calculated for a pair of users.
 
  * buyCount = common purchased items
- * favCount = common favourite items
+ * pvCount = common pvourite items
  */
 public class SimilarityWritable implements Writable {
 
     private long buyCount;
-    private long favCount;
+    private long pvCount;
 
     /**
      * Empty constructor required by Hadoop.
@@ -27,24 +27,24 @@ public class SimilarityWritable implements Writable {
     /**
      * Creates a similarity value with both counts.
      */
-    public SimilarityWritable(long buyCount, long favCount) {
-        set(buyCount, favCount);
+    public SimilarityWritable(long buyCount, long pvCount) {
+        set(buyCount, pvCount);
     }
 
     /**
      * Updates both similarity counts.
      */
-    public void set(long buyCount, long favCount) {
+    public void set(long buyCount, long pvCount) {
         this.buyCount = buyCount;
-        this.favCount = favCount;
+        this.pvCount = pvCount;
     }
 
     public long getBuyCount() {
         return buyCount;
     }
 
-    public long getFavCount() {
-        return favCount;
+    public long getPvCount() {
+        return pvCount;
     }
 
     /**
@@ -53,7 +53,7 @@ public class SimilarityWritable implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(buyCount);
-        out.writeLong(favCount);
+        out.writeLong(pvCount);
     }
 
     /**
@@ -62,7 +62,7 @@ public class SimilarityWritable implements Writable {
     @Override
     public void readFields(DataInput in) throws IOException {
         buyCount = in.readLong();
-        favCount = in.readLong();
+        pvCount = in.readLong();
     }
 
     /**
@@ -70,7 +70,7 @@ public class SimilarityWritable implements Writable {
      */
     @Override
     public String toString() {
-        return buyCount + "," + favCount;
+        return buyCount + "," + pvCount;
     }
 }
 

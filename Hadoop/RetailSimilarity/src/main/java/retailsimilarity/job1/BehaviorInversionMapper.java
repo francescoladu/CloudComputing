@@ -12,7 +12,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import retailsimilarity.writable.ItemBehaviorWritable;
  
 /**
- * Reads user interactions and keeps only buy and fav events.
+ * Reads user interactions and keeps only buy and pv events.
  *
  * Input:  userId,itemId,behavior,timestamp
  * Output: (itemId, behavior) -> userId
@@ -26,7 +26,7 @@ public class BehaviorInversionMapper extends Mapper<
     // Counters used to check the input data.
     public enum InputCounters {
         VALID_BUY_RECORDS,
-        VALID_FAV_RECORDS,
+        VALID_PV_RECORDS,
         FILTERED_BEHAVIORS,
         INVALID_RECORDS,
         HEADER_RECORDS
@@ -142,7 +142,7 @@ public class BehaviorInversionMapper extends Mapper<
  
             byte behaviorCode;
  
-            // Only buy and fav are useful for the similarity.
+            // Only buy and pv are useful for the similarity.
             if ("buy".equals(behavior)) {
                 behaviorCode = ItemBehaviorWritable.BUY;
  
@@ -150,11 +150,11 @@ public class BehaviorInversionMapper extends Mapper<
                         InputCounters.VALID_BUY_RECORDS
                 ).increment(1);
  
-            } else if ("fav".equals(behavior)) {
-                behaviorCode = ItemBehaviorWritable.FAV;
+            } else if ("pv".equals(behavior)) {
+                behaviorCode = ItemBehaviorWritable.PV;
  
                 context.getCounter(
-                        InputCounters.VALID_FAV_RECORDS
+                        InputCounters.VALID_PV_RECORDS
                 ).increment(1);
  
             } else {

@@ -38,14 +38,14 @@ public class SimilarityCombiner extends Reducer<
     ) throws IOException, InterruptedException {
  
         long buySum = 0;
-        long favSum = 0;
+        long pvSum = 0;
  
         for (SimilarityWritable value : values) {
             buySum += value.getBuyCount();
-            favSum += value.getFavCount();
+            pvSum += value.getPvCount();
         }
  
-        outputValue.set(buySum, favSum);
+        outputValue.set(buySum, pvSum);
  
         context.write(key, outputValue);
     }

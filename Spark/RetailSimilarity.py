@@ -7,10 +7,10 @@ Input format after removing Category ID:
 
 Supported behaviors:
     buy
-    fav
+    pv
 
 Final output:
-    user1,user2<TAB>common_buy_items,common_favorite_items
+    user1,user2<TAB>common_buy_items,common_viewed_items
 """
 
 import argparse
@@ -25,7 +25,7 @@ from pyspark.storagelevel import StorageLevel
 # Type aliases used to make the RDD transformations clearer.
 ItemBehavior = Tuple[int, str]       # (item_id, behavior)
 UserPair = Tuple[int, int]           # (user1, user2)
-Similarity = Tuple[int, int]         # (common_buy_count, common_fav_count)
+Similarity = Tuple[int, int]         # (common_buy_count, common_pv_count)
 
 
 def parse_record(
@@ -42,7 +42,7 @@ def parse_record(
 
     Output: ((item_id, behavior), user_id)
 
-    Invalid rows, headers, and behaviors different from buy/fav are discarded.
+    Invalid rows, headers, and behaviors different from buy/pv are discarded.
     """
     line = line.strip()
 
@@ -64,7 +64,7 @@ def parse_record(
 
     behavior = fields[behavior_index].strip().lower()
 
-    if behavior not in {"buy", "fav"}:
+    if behavior not in {"buy", "pv"}:
         return None
 
     return (item_id, behavior), user_id
@@ -151,16 +151,16 @@ def add_similarities(left: Similarity, right: Similarity) -> Similarity:
 def passes_thresholds(
     record: Tuple[UserPair, Similarity],
     min_buy: int,
-    min_fav: int,
+    min_pv: int,
 ) -> bool:
     """
     Keeps only pairs that pass the minimum thresholds.
     the pair is discarded only if both values are below threshold.
 
     """
-    buy_count, fav_count = record[1]
+    buy_count, pv_count = record[1]
 
-    return buy_count >= min_buy or fav_count >= min_fav
+    return buy_count >= min_buy or pv_count >= min_pv
 
 
 def format_output(record: Tuple[UserPair, Similarity]) -> str:
@@ -168,9 +168,9 @@ def format_output(record: Tuple[UserPair, Similarity]) -> str:
     Converts the final result into text format.
 
     """
-    (first_user, second_user), (buy_count, fav_count) = record
+    (first_user, second_user), (buy_count, pv_count) = record
 
-    return f"{first_user},{second_user}\t{buy_count},{fav_count}"
+    return f"{first_user},{second_user}\t{buy_count},{pv_count}"
 
 
 def delete_output_if_needed(
@@ -204,7 +204,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         description=(
-            "Compute separate purchase and favorite similarities "
+            "Compute separate purchase and viewed similarities "
             "between customer pairs with Apache Spark."
         )
     )
@@ -234,10 +234,10 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--min-fav",
+        "--min-pv",
         type=int,
         default=0,
-        help="Minimum common-favorite similarity required in the output.",
+        help="Minimum common-viewed similarity required in the output.",
     )
 
     parser.add_argument(
@@ -319,7 +319,7 @@ def main() -> None:
     if args.job1_partitions < 1 or args.job2_partitions < 1:
         raise ValueError("Partition counts must be positive.")
 
-    if args.min_buy < 0 or args.min_fav < 0:
+    if args.min_buy < 0 or args.min_pv < 0:
         raise ValueError("Similarity thresholds cannot be negative.")
 
     spark_conf = SparkConf().setAppName(args.app_name)
@@ -376,7 +376,7 @@ def main() -> None:
 
         # Equivalent to Hadoop Job 2 Mapper:
         # ((item_id, behavior), {users}) -> ((user1, user2), (1, 0)) for buy
-        #                                -> ((user1, user2), (0, 1)) for fav
+        #                                -> ((user1, user2), (0, 1)) for pv
         pair_contributions = usable_groups.flatMap(
             generate_pair_contributions
         )
@@ -392,7 +392,7 @@ def main() -> None:
             lambda record: passes_thresholds(
                 record,
                 args.min_buy,
-                args.min_fav,
+                args.min_pv,
             )
         )
 
