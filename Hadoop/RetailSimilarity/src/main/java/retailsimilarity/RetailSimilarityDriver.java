@@ -1,21 +1,24 @@
 package retailsimilarity;
 
-import org.apache.hadoop.conf.Configuration;
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.SequenceFile;
+import org.apache.hadoop.io.compress.DefaultCodec;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 import retailsimilarity.job1.BehaviorInversionMapper;
+import retailsimilarity.job1.DistinctUserCombiner;
 import retailsimilarity.job1.DistinctUsersReducer;
 import retailsimilarity.job2.PairGenerationMapper;
 import retailsimilarity.job2.SimilarityCombiner;
@@ -26,298 +29,296 @@ import retailsimilarity.writable.UserListWritable;
 import retailsimilarity.writable.UserPairWritable;
 
 /**
- * Driver class that configures and executes
- * the two MapReduce jobs.
- * Job 1 groups distinct users by item and behavior.
- * Job 2 generates user pairs and calculates their similarity.
+ * Runs the two-job retail user-similarity pipeline.
+ *
+ * Generic Hadoop -D options are used for all thresholds and weights.
  */
-public class RetailSimilarityDriver
-        extends Configured
-        implements Tool {
+public class RetailSimilarityDriver extends Configured implements Tool {
 
-    /**
-     * Executes the two jobs in sequence.
-     */
     @Override
     public int run(String[] args) throws Exception {
-
         if (args.length != 3) {
-            System.err.println(
-                    "Usage: RetailSimilarityDriver "
-                    + "<input> <intermediate-output> <final-output>"
-            );
-
+            printUsage();
             return 2;
         }
 
-        Configuration configuration = getConf();
+        validateConfiguration();
 
         Path inputPath = new Path(args[0]);
-        Path intermediatePath = new Path(args[1]);
-        Path finalOutputPath = new Path(args[2]);
+        Path job1OutputPath = new Path(args[1]);
+        Path job2OutputPath = new Path(args[2]);
 
-        boolean overwrite = configuration.getBoolean(
-                "retailsimilarity.overwrite",
+        boolean overwrite = getConf().getBoolean(
+                RetailSimilarityConfig.OVERWRITE_OUTPUTS,
                 false
         );
 
-        // Deletes previous outputs when overwrite is enabled.
-        if (overwrite) {
-            deleteIfExists(intermediatePath, configuration);
-            deleteIfExists(finalOutputPath, configuration);
-        }
+        prepareOutputPath(job1OutputPath, overwrite);
+        prepareOutputPath(job2OutputPath, overwrite);
 
-        /*
-         * Local mode uses one reducer by default.
-         *
-         * YARN mode uses:
-         * - 2 reducers for Job 1
-         * - 4 reducers for Job 2
-         *
-         * Both values can be changed using -D.
-         */
-        String framework = configuration.get(
-                "mapreduce.framework.name",
-                "local"
-        );
-
-        boolean localMode =
-                "local".equalsIgnoreCase(framework);
-
-        int job1Reducers = configuration.getInt(
-                "retailsimilarity.job1.reducers",
-                localMode ? 1 : 2
-        );
-
-        int job2Reducers = configuration.getInt(
-                "retailsimilarity.job2.reducers",
-                localMode ? 1 : 4
-        );
-
-        System.out.println(
-                "Execution framework: " + framework
-        );
-
-        System.out.println(
-                "Job 1 reducers: " + job1Reducers
-        );
-
-        System.out.println(
-                "Job 2 reducers: " + job2Reducers
-        );
-
-        // Creates and executes the first job.
-        Job job1 = createFirstJob(
-                configuration,
-                inputPath,
-                intermediatePath,
-                job1Reducers
-        );
-
-        boolean firstJobSucceeded =
-                job1.waitForCompletion(true);
-
-        if (!firstJobSucceeded) {
-            System.err.println("Job 1 failed.");
+        Job job1 = buildJob1(inputPath, job1OutputPath);
+        if (!job1.waitForCompletion(true)) {
             return 1;
         }
+        printJob1Summary(job1);
 
-        // Job 2 starts only if Job 1 completes successfully.
-        Job job2 = createSecondJob(
-                configuration,
-                intermediatePath,
-                finalOutputPath,
-                job2Reducers
-        );
-
-        boolean secondJobSucceeded =
-                job2.waitForCompletion(true);
-
-        if (!secondJobSucceeded) {
-            System.err.println("Job 2 failed.");
+        Job job2 = buildJob2(job1OutputPath, job2OutputPath);
+        if (!job2.waitForCompletion(true)) {
             return 1;
         }
+        printJob2Summary(job2);
 
         return 0;
     }
 
-    /**
-     * Configures the job that groups distinct users
-     * by item and behavior.
-     */
-    private Job createFirstJob(
-            Configuration configuration,
-            Path inputPath,
-            Path outputPath,
-            int reducers
-    ) throws Exception {
-
+    private Job buildJob1(Path input, Path output) throws IOException {
         Job job = Job.getInstance(
-                configuration,
-                "Retail similarity - group users by item"
+                getConf(),
+                "retail-similarity-job1-posting-lists"
         );
-
         job.setJarByClass(RetailSimilarityDriver.class);
 
-        job.setMapperClass(
-                BehaviorInversionMapper.class
-        );
+        job.setMapperClass(BehaviorInversionMapper.class);
+        if (getConf().getBoolean(
+                RetailSimilarityConfig.JOB1_COMBINER_ENABLED,
+                true
+        )) {
+            job.setCombinerClass(DistinctUserCombiner.class);
+        }
+        job.setReducerClass(DistinctUsersReducer.class);
 
-        job.setReducerClass(
-                DistinctUsersReducer.class
-        );
+        job.setMapOutputKeyClass(ItemBehaviorWritable.class);
+        job.setMapOutputValueClass(LongWritable.class);
+        job.setOutputKeyClass(ItemBehaviorWritable.class);
+        job.setOutputValueClass(UserListWritable.class);
 
-        job.setMapOutputKeyClass(
-                ItemBehaviorWritable.class
-        );
+        job.setNumReduceTasks(getConf().getInt(
+                RetailSimilarityConfig.JOB1_REDUCERS,
+                RetailSimilarityConfig.DEFAULT_JOB1_REDUCERS
+        ));
 
-        job.setMapOutputValueClass(
-                LongWritable.class
-        );
+        FileInputFormat.addInputPath(job, input);
+        FileOutputFormat.setOutputPath(job, output);
 
-        job.setOutputKeyClass(
-                ItemBehaviorWritable.class
-        );
-
-        job.setOutputValueClass(
-                UserListWritable.class
-        );
-
-        job.setInputFormatClass(
-                TextInputFormat.class
-        );
-
-        /*
-         * The intermediate output is stored as a SequenceFile
-         * to preserve the custom Writable objects.
-         */
-        job.setOutputFormatClass(
-                SequenceFileOutputFormat.class
-        );
-
-        job.setNumReduceTasks(reducers);
-
-        FileInputFormat.addInputPath(
+        job.setOutputFormatClass(SequenceFileOutputFormat.class);
+        FileOutputFormat.setCompressOutput(job, true);
+        FileOutputFormat.setOutputCompressorClass(job, DefaultCodec.class);
+        SequenceFileOutputFormat.setOutputCompressionType(
                 job,
-                inputPath
+                SequenceFile.CompressionType.BLOCK
         );
 
-        FileOutputFormat.setOutputPath(
-                job,
-                outputPath
-        );
-
+        enableMapOutputCompression(job);
         return job;
     }
 
-    /**
-     * Configures the job that generates user pairs
-     * and calculates their similarity.
-     */
-    private Job createSecondJob(
-            Configuration configuration,
-            Path inputPath,
-            Path outputPath,
-            int reducers
-    ) throws Exception {
-
+    private Job buildJob2(Path input, Path output) throws IOException {
         Job job = Job.getInstance(
-                configuration,
-                "Retail similarity - generate user pairs"
+                getConf(),
+                "retail-similarity-job2-bounded-pairs"
         );
-
         job.setJarByClass(RetailSimilarityDriver.class);
 
-        job.setMapperClass(
-                PairGenerationMapper.class
-        );
+        job.setInputFormatClass(SequenceFileInputFormat.class);
+        job.setMapperClass(PairGenerationMapper.class);
+        job.setCombinerClass(SimilarityCombiner.class);
+        job.setReducerClass(SimilarityReducer.class);
 
-        /*
-         * The combiner performs a local sum
-         * before the Shuffle and Sort phase.
-         */
-        job.setCombinerClass(
-                SimilarityCombiner.class
-        );
+        job.setMapOutputKeyClass(UserPairWritable.class);
+        job.setMapOutputValueClass(SimilarityWritable.class);
+        job.setOutputKeyClass(UserPairWritable.class);
+        job.setOutputValueClass(SimilarityWritable.class);
 
-        job.setReducerClass(
-                SimilarityReducer.class
-        );
+        job.setNumReduceTasks(getConf().getInt(
+                RetailSimilarityConfig.JOB2_REDUCERS,
+                RetailSimilarityConfig.DEFAULT_JOB2_REDUCERS
+        ));
 
-        job.setMapOutputKeyClass(
-                UserPairWritable.class
-        );
+        FileInputFormat.addInputPath(job, input);
+        FileOutputFormat.setOutputPath(job, output);
 
-        job.setMapOutputValueClass(
-                SimilarityWritable.class
-        );
-
-        job.setOutputKeyClass(
-                UserPairWritable.class
-        );
-
-        job.setOutputValueClass(
-                SimilarityWritable.class
-        );
-
-        job.setInputFormatClass(
-                SequenceFileInputFormat.class
-        );
-
-        job.setOutputFormatClass(
-                TextOutputFormat.class
-        );
-
-        job.setNumReduceTasks(reducers);
-
-        FileInputFormat.addInputPath(
-                job,
-                inputPath
-        );
-
-        FileOutputFormat.setOutputPath(
-                job,
-                outputPath
-        );
-
+        enableMapOutputCompression(job);
         return job;
     }
 
-    /**
-     * Deletes an output path if it already exists.
-     */
-    private void deleteIfExists(
-            Path path,
-            Configuration configuration
-    ) throws Exception {
-
-        FileSystem fileSystem =
-                path.getFileSystem(configuration);
-
-        if (fileSystem.exists(path)) {
-            boolean deleted =
-                    fileSystem.delete(path, true);
-
-            if (!deleted) {
-                throw new IllegalStateException(
-                        "Unable to delete path: " + path
-                );
-            }
+    private void enableMapOutputCompression(Job job) {
+        job.getConfiguration().setBoolean(
+                "mapreduce.map.output.compress",
+                true
+        );
+        if (job.getConfiguration().get(
+                "mapreduce.map.output.compress.codec"
+        ) == null) {
+            job.getConfiguration().set(
+                    "mapreduce.map.output.compress.codec",
+                    DefaultCodec.class.getName()
+            );
         }
     }
 
-    /**
-     * Starts the application using ToolRunner.
-     */
-    public static void main(String[] args)
-            throws Exception {
+    private void prepareOutputPath(Path path, boolean overwrite)
+            throws IOException {
+        FileSystem fileSystem = path.getFileSystem(getConf());
+        if (!fileSystem.exists(path)) {
+            return;
+        }
+        if (!overwrite) {
+            throw new IOException(
+                    "Output path already exists: " + path
+                            + ". Set -D"
+                            + RetailSimilarityConfig.OVERWRITE_OUTPUTS
+                            + "=true to delete it."
+            );
+        }
+        if (!fileSystem.delete(path, true)) {
+            throw new IOException("Cannot delete output path: " + path);
+        }
+    }
 
+    private void validateConfiguration() {
+        validateAtLeast(
+                RetailSimilarityConfig.EXACT_MAX_USERS_BUY,
+                getConf().getInt(
+                        RetailSimilarityConfig.EXACT_MAX_USERS_BUY,
+                        RetailSimilarityConfig.DEFAULT_EXACT_MAX_USERS_BUY
+                ),
+                -1
+        );
+        validateAtLeast(
+                RetailSimilarityConfig.EXACT_MAX_USERS_PV,
+                getConf().getInt(
+                        RetailSimilarityConfig.EXACT_MAX_USERS_PV,
+                        RetailSimilarityConfig.DEFAULT_EXACT_MAX_USERS_PV
+                ),
+                -1
+        );
+        validateAtLeast(
+                RetailSimilarityConfig.MAX_NEIGHBOURS_BUY,
+                getConf().getInt(
+                        RetailSimilarityConfig.MAX_NEIGHBOURS_BUY,
+                        RetailSimilarityConfig.DEFAULT_MAX_NEIGHBOURS_BUY
+                ),
+                0
+        );
+        validateAtLeast(
+                RetailSimilarityConfig.MAX_NEIGHBOURS_PV,
+                getConf().getInt(
+                        RetailSimilarityConfig.MAX_NEIGHBOURS_PV,
+                        RetailSimilarityConfig.DEFAULT_MAX_NEIGHBOURS_PV
+                ),
+                0
+        );
+
+        boolean iufEnabled = getConf().getBoolean(
+                RetailSimilarityConfig.IUF_ENABLED,
+                true
+        );
+        if (iufEnabled && getConf().getLong(
+                RetailSimilarityConfig.TOTAL_USERS,
+                -1L
+        ) <= 0L) {
+            throw new IllegalArgumentException(
+                    "When IUF is enabled, set -D"
+                            + RetailSimilarityConfig.TOTAL_USERS
+                            + "=<distinct-user-count>"
+            );
+        }
+    }
+
+    private static void validateAtLeast(
+            String key,
+            int value,
+            int minimum
+    ) {
+        if (value < minimum) {
+            throw new IllegalArgumentException(
+                    key + " must be >= " + minimum + ", found " + value
+            );
+        }
+    }
+
+    private static void printJob1Summary(Job job) throws IOException {
+        System.out.println("\n=== Job 1 threshold forecast ===");
+        printCounter(
+                job,
+                DistinctUsersReducer.ItemCounters.DISTINCT_BUY_EDGES
+        );
+        printCounter(
+                job,
+                DistinctUsersReducer.ItemCounters.DISTINCT_PV_EDGES
+        );
+        printCounter(
+                job,
+                DistinctUsersReducer.ItemCounters.POTENTIAL_BUY_ALL_PAIRS
+        );
+        printCounter(
+                job,
+                DistinctUsersReducer.ItemCounters.POTENTIAL_PV_ALL_PAIRS
+        );
+        printCounter(
+                job,
+                DistinctUsersReducer.ItemCounters.PLANNED_BUY_PAIR_CONTRIBUTIONS
+        );
+        printCounter(
+                job,
+                DistinctUsersReducer.ItemCounters.PLANNED_PV_PAIR_CONTRIBUTIONS
+        );
+    }
+
+    private static void printJob2Summary(Job job) throws IOException {
+        System.out.println("\n=== Job 2 generated output ===");
+        printCounter(job, PairGenerationMapper.PairCounters.GENERATED_BUY_PAIRS);
+        printCounter(job, PairGenerationMapper.PairCounters.GENERATED_PV_PAIRS);
+        printCounter(job, PairGenerationMapper.PairCounters.EXACT_BUY_POSTING_LISTS);
+        printCounter(job, PairGenerationMapper.PairCounters.EXACT_PV_POSTING_LISTS);
+        printCounter(job, PairGenerationMapper.PairCounters.SAMPLED_BUY_POSTING_LISTS);
+        printCounter(job, PairGenerationMapper.PairCounters.SAMPLED_PV_POSTING_LISTS);
+        printCounter(job, SimilarityReducer.SimilarityCounters.EMITTED_PAIRS);
+        printCounter(job, SimilarityReducer.SimilarityCounters.FILTERED_BY_SUPPORT);
+        printCounter(job, SimilarityReducer.SimilarityCounters.FILTERED_BY_SCORE);
+    }
+
+    private static void printCounter(Job job, Enum<?> counterName)
+            throws IOException {
+        Counter counter = job.getCounters().findCounter(counterName);
+        System.out.println(counterName.name() + "=" + counter.getValue());
+    }
+
+    private static void printUsage() {
+        System.err.println(
+                "Usage: hadoop jar <jar> "
+                        + RetailSimilarityDriver.class.getName()
+                        + " [generic -D options] <input> <job1-output> <job2-output>"
+        );
+        System.err.println("Required when IUF is enabled:");
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.TOTAL_USERS
+                        + "=<number of distinct users>"
+        );
+        System.err.println("Main threshold options:");
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.EXACT_MAX_USERS_BUY
+                        + "=<n>"
+        );
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.EXACT_MAX_USERS_PV
+                        + "=<n>"
+        );
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.MAX_NEIGHBOURS_BUY
+                        + "=<k>"
+        );
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.MAX_NEIGHBOURS_PV
+                        + "=<k>"
+        );
+    }
+
+    public static void main(String[] args) throws Exception {
         int exitCode = ToolRunner.run(
-                new Configuration(),
                 new RetailSimilarityDriver(),
                 args
         );
-
         System.exit(exitCode);
     }
 }

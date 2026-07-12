@@ -9,43 +9,40 @@ import java.util.Collection;
 import org.apache.hadoop.io.Writable;
 
 /**
- * Contains the ordered list of distinct users
- * related to a specific item and behavior.
+ * Sorted array of distinct users associated with an item and behavior.
  */
 public class UserListWritable implements Writable {
 
     private long[] users;
 
-    /**
-     * Empty constructor required by Hadoop.
-     */
     public UserListWritable() {
         users = new long[0];
     }
 
-    /**
-     * Creates the user list from a collection.
-     */
     public UserListWritable(Collection<Long> users) {
         setUsers(users);
     }
 
-    /**
-     * Copies the users into an array and sorts them.
-     */
     public void setUsers(Collection<Long> userCollection) {
         users = new long[userCollection.size()];
-
         int index = 0;
-
         for (Long user : userCollection) {
-            users[index] = user;
-            index++;
+            if (user == null) {
+                throw new IllegalArgumentException("User collection contains null");
+            }
+            users[index++] = user;
         }
-
         Arrays.sort(users);
     }
 
+    public void setUsers(long[] userArray) {
+        users = userArray.clone();
+        Arrays.sort(users);
+    }
+
+    /**
+     * The returned array must be treated as read-only.
+     */
     public long[] getUsers() {
         return users;
     }
@@ -54,41 +51,26 @@ public class UserListWritable implements Writable {
         return users.length;
     }
 
-    /**
-     * Serializes the list size and all user IDs.
-     */
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(users.length);
-
         for (long user : users) {
             out.writeLong(user);
         }
     }
 
-    /**
-     * Reads the list size and all user IDs.
-     */
     @Override
     public void readFields(DataInput in) throws IOException {
         int size = in.readInt();
-
         if (size < 0) {
-            throw new IOException(
-                    "Invalid user list size: " + size
-            );
+            throw new IOException("Invalid user list size: " + size);
         }
-
         users = new long[size];
-
         for (int index = 0; index < size; index++) {
             users[index] = in.readLong();
         }
     }
 
-    /**
-     * Returns the user list in text format.
-     */
     @Override
     public String toString() {
         return Arrays.toString(users);

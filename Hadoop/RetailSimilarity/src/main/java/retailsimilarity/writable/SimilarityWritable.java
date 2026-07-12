@@ -7,70 +7,112 @@ import java.io.IOException;
 import org.apache.hadoop.io.Writable;
 
 /**
- * Contains the two similarity values
- * calculated for a pair of users.
-
- * buyCount = common purchased items
- * pvCount = common pvourite items
+ * Similarity accumulator and final result for one user pair.
+ *
+ * Mapper/combiner fields:
+ * - commonBuyItems/commonPvItems: raw shared-item contributions;
+ * - weightedBuy/weightedPv: sum of IUF weights.
+ *
+ * Reducer field:
+ * - score: behavior-weighted final score.
  */
 public class SimilarityWritable implements Writable {
 
-    private long buyCount;
-    private long pvCount;
+    private long commonBuyItems;
+    private long commonPvItems;
+    private double weightedBuy;
+    private double weightedPv;
+    private double score;
 
-    /**
-     * Empty constructor required by Hadoop.
-     */
     public SimilarityWritable() {
     }
 
-    /**
-     * Creates a similarity value with both counts.
-     */
-    public SimilarityWritable(long buyCount, long pvCount) {
-        set(buyCount, pvCount);
+    public SimilarityWritable(
+            long commonBuyItems,
+            long commonPvItems,
+            double weightedBuy,
+            double weightedPv,
+            double score
+    ) {
+        set(
+                commonBuyItems,
+                commonPvItems,
+                weightedBuy,
+                weightedPv,
+                score
+        );
     }
 
-    /**
-     * Updates both similarity counts.
-     */
-    public void set(long buyCount, long pvCount) {
-        this.buyCount = buyCount;
-        this.pvCount = pvCount;
+    public void set(
+            long commonBuyItems,
+            long commonPvItems,
+            double weightedBuy,
+            double weightedPv,
+            double score
+    ) {
+        this.commonBuyItems = commonBuyItems;
+        this.commonPvItems = commonPvItems;
+        this.weightedBuy = weightedBuy;
+        this.weightedPv = weightedPv;
+        this.score = score;
     }
 
-    public long getBuyCount() {
-        return buyCount;
+    public void setBuyContribution(double itemWeight) {
+        set(1L, 0L, itemWeight, 0.0, 0.0);
     }
 
-    public long getPvCount() {
-        return pvCount;
+    public void setPvContribution(double itemWeight) {
+        set(0L, 1L, 0.0, itemWeight, 0.0);
     }
 
-    /**
-     * Serializes the two similarity counts.
-     */
+    public long getCommonBuyItems() {
+        return commonBuyItems;
+    }
+
+    public long getCommonPvItems() {
+        return commonPvItems;
+    }
+
+    public double getWeightedBuy() {
+        return weightedBuy;
+    }
+
+    public double getWeightedPv() {
+        return weightedPv;
+    }
+
+    public double getScore() {
+        return score;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeLong(buyCount);
-        out.writeLong(pvCount);
+        out.writeLong(commonBuyItems);
+        out.writeLong(commonPvItems);
+        out.writeDouble(weightedBuy);
+        out.writeDouble(weightedPv);
+        out.writeDouble(score);
     }
 
-    /**
-     * Reads the two similarity counts.
-     */
     @Override
     public void readFields(DataInput in) throws IOException {
-        buyCount = in.readLong();
-        pvCount = in.readLong();
+        commonBuyItems = in.readLong();
+        commonPvItems = in.readLong();
+        weightedBuy = in.readDouble();
+        weightedPv = in.readDouble();
+        score = in.readDouble();
     }
 
     /**
-     * Returns the similarity values in text format.
+     * Final TextOutputFormat representation:
+     * commonBuy,commonPv,weightedBuy,weightedPv,score
      */
     @Override
     public String toString() {
-        return buyCount + "," + pvCount;
+        return commonBuyItems
+                + "," + commonPvItems
+                + "," + weightedBuy
+                + "," + weightedPv
+                + "," + score;
     }
 }
-
