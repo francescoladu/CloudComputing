@@ -1,7 +1,7 @@
 package retailsimilarity;
 
 /**
- * Centralized configuration keys used by both MapReduce jobs.
+ * Centralized configuration keys used by the MapReduce pipeline.
  */
 public final class RetailSimilarityConfig {
 
@@ -23,6 +23,8 @@ public final class RetailSimilarityConfig {
             "retailsimilarity.job1.reducers";
     public static final String JOB2_REDUCERS =
             "retailsimilarity.job2.reducers";
+    public static final String JOB3_REDUCERS =
+            "retailsimilarity.job3.reducers";
     public static final String JOB1_COMBINER_ENABLED =
             "retailsimilarity.job1.combiner.enabled";
     public static final String OVERWRITE_OUTPUTS =
@@ -67,8 +69,13 @@ public final class RetailSimilarityConfig {
     public static final String MIN_SCORE =
             "retailsimilarity.min.score";
 
+    public static final String OUTPUT_TOP_K =
+            "retailsimilarity.output.top.k";
+
     public static final int DEFAULT_JOB1_REDUCERS = 16;
     public static final int DEFAULT_JOB2_REDUCERS = 32;
+    public static final int DEFAULT_JOB3_REDUCERS = 32;
+    public static final int DEFAULT_OUTPUT_TOP_K = 50;
 
     public static final int DEFAULT_EXACT_MAX_USERS_BUY = 21;
     public static final int DEFAULT_EXACT_MAX_USERS_PV = 5;

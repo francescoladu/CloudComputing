@@ -14,6 +14,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
@@ -23,13 +24,21 @@ import retailsimilarity.job1.DistinctUsersReducer;
 import retailsimilarity.job2.PairGenerationMapper;
 import retailsimilarity.job2.SimilarityCombiner;
 import retailsimilarity.job2.SimilarityReducer;
+import retailsimilarity.job3.TopKMapper;
+import retailsimilarity.job3.TopKReducer;
 import retailsimilarity.writable.ItemBehaviorWritable;
+import retailsimilarity.writable.SimilarUserListWritable;
+import retailsimilarity.writable.SimilarUserWritable;
 import retailsimilarity.writable.SimilarityWritable;
 import retailsimilarity.writable.UserListWritable;
 import retailsimilarity.writable.UserPairWritable;
 
 /**
- * Runs the two-job retail user-similarity pipeline.
+ * Runs the three-job retail user-similarity pipeline.
+ *
+ * Job 1: item/behaviour -> distinct users.
+ * Job 2: canonical user pair -> aggregated similarity.
+ * Job 3: user -> ordered Top-K similar users.
  *
  * Generic Hadoop -D options are used for all thresholds and weights.
  */
@@ -37,7 +46,7 @@ public class RetailSimilarityDriver extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-        if (args.length != 3) {
+        if (args.length != 4) {
             printUsage();
             return 2;
         }
@@ -47,6 +56,7 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         Path inputPath = new Path(args[0]);
         Path job1OutputPath = new Path(args[1]);
         Path job2OutputPath = new Path(args[2]);
+        Path job3OutputPath = new Path(args[3]);
 
         boolean overwrite = getConf().getBoolean(
                 RetailSimilarityConfig.OVERWRITE_OUTPUTS,
@@ -55,6 +65,7 @@ public class RetailSimilarityDriver extends Configured implements Tool {
 
         prepareOutputPath(job1OutputPath, overwrite);
         prepareOutputPath(job2OutputPath, overwrite);
+        prepareOutputPath(job3OutputPath, overwrite);
 
         Job job1 = buildJob1(inputPath, job1OutputPath);
         if (!job1.waitForCompletion(true)) {
@@ -67,6 +78,12 @@ public class RetailSimilarityDriver extends Configured implements Tool {
             return 1;
         }
         printJob2Summary(job2);
+
+        Job job3 = buildJob3(job2OutputPath, job3OutputPath);
+        if (!job3.waitForCompletion(true)) {
+            return 1;
+        }
+        printJob3Summary(job3);
 
         return 0;
     }
@@ -100,14 +117,7 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         FileInputFormat.addInputPath(job, input);
         FileOutputFormat.setOutputPath(job, output);
 
-        job.setOutputFormatClass(SequenceFileOutputFormat.class);
-        FileOutputFormat.setCompressOutput(job, true);
-        FileOutputFormat.setOutputCompressorClass(job, DefaultCodec.class);
-        SequenceFileOutputFormat.setOutputCompressionType(
-                job,
-                SequenceFile.CompressionType.BLOCK
-        );
-
+        configureSequenceFileOutput(job);
         enableMapOutputCompression(job);
         return job;
     }
@@ -137,8 +147,50 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         FileInputFormat.addInputPath(job, input);
         FileOutputFormat.setOutputPath(job, output);
 
+        // Job 2 is now a typed, compressed intermediate result consumed by
+        // Job 3, avoiding text parsing and loss of precision.
+        configureSequenceFileOutput(job);
         enableMapOutputCompression(job);
         return job;
+    }
+
+    private Job buildJob3(Path input, Path output) throws IOException {
+        Job job = Job.getInstance(
+                getConf(),
+                "retail-similarity-job3-user-top-k"
+        );
+        job.setJarByClass(RetailSimilarityDriver.class);
+
+        job.setInputFormatClass(SequenceFileInputFormat.class);
+        job.setMapperClass(TopKMapper.class);
+        job.setReducerClass(TopKReducer.class);
+
+        job.setMapOutputKeyClass(LongWritable.class);
+        job.setMapOutputValueClass(SimilarUserWritable.class);
+        job.setOutputKeyClass(LongWritable.class);
+        job.setOutputValueClass(SimilarUserListWritable.class);
+
+        job.setNumReduceTasks(getConf().getInt(
+                RetailSimilarityConfig.JOB3_REDUCERS,
+                RetailSimilarityConfig.DEFAULT_JOB3_REDUCERS
+        ));
+
+        FileInputFormat.addInputPath(job, input);
+        FileOutputFormat.setOutputPath(job, output);
+        job.setOutputFormatClass(TextOutputFormat.class);
+
+        enableMapOutputCompression(job);
+        return job;
+    }
+
+    private void configureSequenceFileOutput(Job job) {
+        job.setOutputFormatClass(SequenceFileOutputFormat.class);
+        FileOutputFormat.setCompressOutput(job, true);
+        FileOutputFormat.setOutputCompressorClass(job, DefaultCodec.class);
+        SequenceFileOutputFormat.setOutputCompressionType(
+                job,
+                SequenceFile.CompressionType.BLOCK
+        );
     }
 
     private void enableMapOutputCompression(Job job) {
@@ -207,6 +259,22 @@ public class RetailSimilarityDriver extends Configured implements Tool {
                         RetailSimilarityConfig.DEFAULT_MAX_NEIGHBOURS_PV
                 ),
                 0
+        );
+        validateAtLeast(
+                RetailSimilarityConfig.OUTPUT_TOP_K,
+                getConf().getInt(
+                        RetailSimilarityConfig.OUTPUT_TOP_K,
+                        RetailSimilarityConfig.DEFAULT_OUTPUT_TOP_K
+                ),
+                1
+        );
+        validateAtLeast(
+                RetailSimilarityConfig.JOB3_REDUCERS,
+                getConf().getInt(
+                        RetailSimilarityConfig.JOB3_REDUCERS,
+                        RetailSimilarityConfig.DEFAULT_JOB3_REDUCERS
+                ),
+                1
         );
 
         boolean iufEnabled = getConf().getBoolean(
@@ -278,6 +346,18 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         printCounter(job, SimilarityReducer.SimilarityCounters.FILTERED_BY_SCORE);
     }
 
+    private static void printJob3Summary(Job job) throws IOException {
+        System.out.println("\n=== Job 3 Top-K output ===");
+        printCounter(job, TopKMapper.TopKMapCounters.DIRECTED_CANDIDATES);
+        printCounter(job, TopKMapper.TopKMapCounters.INVALID_SCORES);
+        printCounter(job, TopKMapper.TopKMapCounters.SELF_PAIRS);
+        printCounter(job, TopKReducer.TopKReduceCounters.USERS_EMITTED);
+        printCounter(job, TopKReducer.TopKReduceCounters.CANDIDATES_SEEN);
+        printCounter(job, TopKReducer.TopKReduceCounters.CANDIDATES_REJECTED);
+        printCounter(job, TopKReducer.TopKReduceCounters.CANDIDATES_REPLACED);
+        printCounter(job, TopKReducer.TopKReduceCounters.USERS_WITH_FEWER_THAN_K);
+    }
+
     private static void printCounter(Job job, Enum<?> counterName)
             throws IOException {
         Counter counter = job.getCounters().findCounter(counterName);
@@ -288,12 +368,23 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         System.err.println(
                 "Usage: hadoop jar <jar> "
                         + RetailSimilarityDriver.class.getName()
-                        + " [generic -D options] <input> <job1-output> <job2-output>"
+                        + " [generic -D options] <input> <job1-output>"
+                        + " <job2-output> <final-top-k-output>"
         );
         System.err.println("Required when IUF is enabled:");
         System.err.println(
                 "  -D" + RetailSimilarityConfig.TOTAL_USERS
                         + "=<number of distinct users>"
+        );
+        System.err.println("Top-K options:");
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.OUTPUT_TOP_K
+                        + "=<k> (default "
+                        + RetailSimilarityConfig.DEFAULT_OUTPUT_TOP_K + ")"
+        );
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.JOB3_REDUCERS
+                        + "=<reducers>"
         );
         System.err.println("Main threshold options:");
         System.err.println(
