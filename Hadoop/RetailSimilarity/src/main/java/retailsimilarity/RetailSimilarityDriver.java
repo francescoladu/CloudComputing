@@ -281,15 +281,24 @@ public class RetailSimilarityDriver extends Configured implements Tool {
                 RetailSimilarityConfig.IUF_ENABLED,
                 true
         );
-        if (iufEnabled && getConf().getLong(
-                RetailSimilarityConfig.TOTAL_USERS,
-                -1L
-        ) <= 0L) {
-            throw new IllegalArgumentException(
-                    "When IUF is enabled, set -D"
-                            + RetailSimilarityConfig.TOTAL_USERS
-                            + "=<distinct-user-count>"
+        if (iufEnabled) {
+            long totalUsersBuy = getConf().getLong(
+                    RetailSimilarityConfig.TOTAL_USERS_BUY,
+                    -1L
             );
+            long totalUsersPv = getConf().getLong(
+                    RetailSimilarityConfig.TOTAL_USERS_PV,
+                    -1L
+            );
+            if (totalUsersBuy <= 0L || totalUsersPv <= 0L) {
+                throw new IllegalArgumentException(
+                        "When IUF is enabled, set -D"
+                                + RetailSimilarityConfig.TOTAL_USERS_BUY
+                                + "=<distinct-buy-user-count> and -D"
+                                + RetailSimilarityConfig.TOTAL_USERS_PV
+                                + "=<distinct-pv-user-count>"
+                );
+            }
         }
     }
 
@@ -373,8 +382,12 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         );
         System.err.println("Required when IUF is enabled:");
         System.err.println(
-                "  -D" + RetailSimilarityConfig.TOTAL_USERS
-                        + "=<number of distinct users>"
+                "  -D" + RetailSimilarityConfig.TOTAL_USERS_BUY
+                        + "=<number of distinct buy users>"
+        );
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.TOTAL_USERS_PV
+                        + "=<number of distinct pv users>"
         );
         System.err.println("Top-K options:");
         System.err.println(

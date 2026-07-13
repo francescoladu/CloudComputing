@@ -50,8 +50,10 @@ public final class RetailSimilarityConfig {
 
     public static final String IUF_ENABLED =
             "retailsimilarity.iuf.enabled";
-    public static final String TOTAL_USERS =
-            "retailsimilarity.total.users";
+    public static final String TOTAL_USERS_BUY =
+            "retailsimilarity.total.users.buy";
+    public static final String TOTAL_USERS_PV =
+            "retailsimilarity.total.users.pv";
     public static final String IUF_SMOOTHING =
             "retailsimilarity.iuf.smoothing";
     public static final String IUF_MAX_WEIGHT =

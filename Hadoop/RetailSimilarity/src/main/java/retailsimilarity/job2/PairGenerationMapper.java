@@ -44,7 +44,8 @@ public class PairGenerationMapper extends Mapper<
     private long samplingSeed;
 
     private boolean iufEnabled;
-    private long totalUsers;
+    private long totalUsersBuy;
+    private long totalUsersPv;
     private double iufSmoothing;
     private double iufMaxWeight;
 
@@ -82,8 +83,12 @@ public class PairGenerationMapper extends Mapper<
                 RetailSimilarityConfig.IUF_ENABLED,
                 true
         );
-        totalUsers = configuration.getLong(
-                RetailSimilarityConfig.TOTAL_USERS,
+        totalUsersBuy = configuration.getLong(
+                RetailSimilarityConfig.TOTAL_USERS_BUY,
+                -1L
+        );
+        totalUsersPv = configuration.getLong(
+                RetailSimilarityConfig.TOTAL_USERS_PV,
                 -1L
         );
         iufSmoothing = configuration.getDouble(
@@ -95,12 +100,21 @@ public class PairGenerationMapper extends Mapper<
                 RetailSimilarityConfig.DEFAULT_IUF_MAX_WEIGHT
         );
 
-        if (iufEnabled && totalUsers <= 0L) {
-            throw new IOException(
-                    "IUF is enabled but "
-                            + RetailSimilarityConfig.TOTAL_USERS
-                            + " is not a positive number"
-            );
+        if (iufEnabled) {
+            if (totalUsersBuy <= 0L) {
+                throw new IOException(
+                        "IUF is enabled but "
+                                + RetailSimilarityConfig.TOTAL_USERS_BUY
+                                + " is not a positive number"
+                );
+            }
+            if (totalUsersPv <= 0L) {
+                throw new IOException(
+                        "IUF is enabled but "
+                                + RetailSimilarityConfig.TOTAL_USERS_PV
+                                + " is not a positive number"
+                );
+            }
         }
         if (iufSmoothing < 0.0) {
             throw new IOException("IUF smoothing must be non-negative");
@@ -123,7 +137,7 @@ public class PairGenerationMapper extends Mapper<
             return;
         }
 
-        double itemWeight = computeItemWeight(degree);
+        double itemWeight = computeItemWeight(key.getBehavior(), degree);
         int exactLimit = exactLimitFor(key.getBehavior());
 
         if (exactLimit < 0 || degree <= exactLimit) {
@@ -274,12 +288,15 @@ public class PairGenerationMapper extends Mapper<
         }
     }
 
-    private double computeItemWeight(int degree) {
+    private double computeItemWeight(byte behavior, int degree) {
         if (!iufEnabled) {
             return 1.0;
         }
 
-        double numerator = totalUsers + iufSmoothing;
+        long totalUsersForBehavior = behavior == ItemBehaviorWritable.BUY
+                ? totalUsersBuy
+                : totalUsersPv;
+        double numerator = totalUsersForBehavior + iufSmoothing;
         double denominator = degree + iufSmoothing;
         double weight = Math.log(numerator / denominator);
 
