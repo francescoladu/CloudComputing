@@ -2,11 +2,11 @@ package retailsimilarity.job3;
 
 import java.io.IOException;
 
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.mapreduce.Mapper;
 
 import retailsimilarity.writable.SimilarUserWritable;
-import retailsimilarity.writable.SimilarityWritable;
 import retailsimilarity.writable.UserPairWritable;
 
 /**
@@ -21,7 +21,7 @@ import retailsimilarity.writable.UserPairWritable;
  */
 public class TopKMapper extends Mapper<
         UserPairWritable,
-        SimilarityWritable,
+        DoubleWritable,
         LongWritable,
         SimilarUserWritable> {
 
@@ -38,13 +38,13 @@ public class TopKMapper extends Mapper<
     @Override
     protected void map(
             UserPairWritable key,
-            SimilarityWritable value,
+            DoubleWritable value,
             Context context
     ) throws IOException, InterruptedException {
 
         long firstUser = key.getFirstUser();
         long secondUser = key.getSecondUser();
-        double score = value.getScore();
+        double score = value.get();
 
         if (firstUser == secondUser) {
             context.getCounter(TopKMapCounters.SELF_PAIRS).increment(1L);

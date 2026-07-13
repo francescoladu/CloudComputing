@@ -48,26 +48,10 @@ public final class RetailSimilarityConfig {
     public static final String SAMPLING_SEED =
             "retailsimilarity.pairs.sample.seed";
 
-    public static final String IUF_ENABLED =
-            "retailsimilarity.iuf.enabled";
-    public static final String TOTAL_USERS_BUY =
-            "retailsimilarity.total.users.buy";
-    public static final String TOTAL_USERS_PV =
-            "retailsimilarity.total.users.pv";
-    public static final String IUF_SMOOTHING =
-            "retailsimilarity.iuf.smoothing";
-    public static final String IUF_MAX_WEIGHT =
-            "retailsimilarity.iuf.max.weight";
-
     public static final String BUY_BEHAVIOR_WEIGHT =
             "retailsimilarity.behavior.weight.buy";
     public static final String PV_BEHAVIOR_WEIGHT =
             "retailsimilarity.behavior.weight.pv";
-
-    public static final String MIN_BUY_COUNT =
-            "retailsimilarity.min.buy.count";
-    public static final String MIN_PV_COUNT =
-            "retailsimilarity.min.pv.count";
     public static final String MIN_SCORE =
             "retailsimilarity.min.score";
 
@@ -87,8 +71,7 @@ public final class RetailSimilarityConfig {
     public static final long DEFAULT_SAMPLING_SEED =
             0x6A09E667F3BCC909L;
 
-    public static final double DEFAULT_IUF_SMOOTHING = 1.0;
-    public static final double DEFAULT_IUF_MAX_WEIGHT = 8.0;
     public static final double DEFAULT_BUY_BEHAVIOR_WEIGHT = 1.0;
     public static final double DEFAULT_PV_BEHAVIOR_WEIGHT = 0.2;
+    public static final double DEFAULT_MIN_SCORE = 0.0;
 }

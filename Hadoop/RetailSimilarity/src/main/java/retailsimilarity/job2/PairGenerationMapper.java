@@ -4,11 +4,11 @@ import java.io.IOException;
 import java.util.SplittableRandom;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.mapreduce.Mapper;
 
 import retailsimilarity.RetailSimilarityConfig;
 import retailsimilarity.writable.ItemBehaviorWritable;
-import retailsimilarity.writable.SimilarityWritable;
 import retailsimilarity.writable.UserListWritable;
 import retailsimilarity.writable.UserPairWritable;
 
@@ -24,7 +24,7 @@ public class PairGenerationMapper extends Mapper<
         ItemBehaviorWritable,
         UserListWritable,
         UserPairWritable,
-        SimilarityWritable> {
+        DoubleWritable> {
 
     public enum PairCounters {
         EXACT_BUY_POSTING_LISTS,
@@ -42,17 +42,13 @@ public class PairGenerationMapper extends Mapper<
     private int maxNeighboursBuy;
     private int maxNeighboursPv;
     private long samplingSeed;
-
-    private boolean iufEnabled;
-    private long totalUsersBuy;
-    private long totalUsersPv;
-    private double iufSmoothing;
-    private double iufMaxWeight;
+    private double buyBehaviorWeight;
+    private double pvBehaviorWeight;
 
     private final UserPairWritable outputKey =
             new UserPairWritable();
-    private final SimilarityWritable outputValue =
-            new SimilarityWritable();
+    private final DoubleWritable outputValue =
+            new DoubleWritable();
 
     @Override
     protected void setup(Context context) throws IOException {
@@ -78,49 +74,17 @@ public class PairGenerationMapper extends Mapper<
                 RetailSimilarityConfig.SAMPLING_SEED,
                 RetailSimilarityConfig.DEFAULT_SAMPLING_SEED
         );
-
-        iufEnabled = configuration.getBoolean(
-                RetailSimilarityConfig.IUF_ENABLED,
-                true
+        buyBehaviorWeight = configuration.getDouble(
+                RetailSimilarityConfig.BUY_BEHAVIOR_WEIGHT,
+                RetailSimilarityConfig.DEFAULT_BUY_BEHAVIOR_WEIGHT
         );
-        totalUsersBuy = configuration.getLong(
-                RetailSimilarityConfig.TOTAL_USERS_BUY,
-                -1L
-        );
-        totalUsersPv = configuration.getLong(
-                RetailSimilarityConfig.TOTAL_USERS_PV,
-                -1L
-        );
-        iufSmoothing = configuration.getDouble(
-                RetailSimilarityConfig.IUF_SMOOTHING,
-                RetailSimilarityConfig.DEFAULT_IUF_SMOOTHING
-        );
-        iufMaxWeight = configuration.getDouble(
-                RetailSimilarityConfig.IUF_MAX_WEIGHT,
-                RetailSimilarityConfig.DEFAULT_IUF_MAX_WEIGHT
+        pvBehaviorWeight = configuration.getDouble(
+                RetailSimilarityConfig.PV_BEHAVIOR_WEIGHT,
+                RetailSimilarityConfig.DEFAULT_PV_BEHAVIOR_WEIGHT
         );
 
-        if (iufEnabled) {
-            if (totalUsersBuy <= 0L) {
-                throw new IOException(
-                        "IUF is enabled but "
-                                + RetailSimilarityConfig.TOTAL_USERS_BUY
-                                + " is not a positive number"
-                );
-            }
-            if (totalUsersPv <= 0L) {
-                throw new IOException(
-                        "IUF is enabled but "
-                                + RetailSimilarityConfig.TOTAL_USERS_PV
-                                + " is not a positive number"
-                );
-            }
-        }
-        if (iufSmoothing < 0.0) {
-            throw new IOException("IUF smoothing must be non-negative");
-        }
-        if (iufMaxWeight <= 0.0) {
-            throw new IOException("IUF max weight must be positive");
+        if (buyBehaviorWeight < 0.0 || pvBehaviorWeight < 0.0) {
+            throw new IOException("Behavior weights cannot be negative");
         }
     }
 
@@ -137,11 +101,11 @@ public class PairGenerationMapper extends Mapper<
             return;
         }
 
-        double itemWeight = computeItemWeight(key.getBehavior(), degree);
+        double contribution = behaviorContribution(key.getBehavior());
         int exactLimit = exactLimitFor(key.getBehavior());
 
         if (exactLimit < 0 || degree <= exactLimit) {
-            emitAllPairs(key.getBehavior(), users, itemWeight, context);
+            emitAllPairs(key.getBehavior(), users, contribution, context);
             incrementPostingListCounter(key.getBehavior(), true, context);
             return;
         }
@@ -151,7 +115,7 @@ public class PairGenerationMapper extends Mapper<
                 key,
                 users,
                 requestedMaxNeighbours,
-                itemWeight,
+                contribution,
                 context
         );
         incrementPostingListCounter(key.getBehavior(), false, context);
@@ -160,7 +124,7 @@ public class PairGenerationMapper extends Mapper<
     private void emitAllPairs(
             byte behavior,
             long[] users,
-            double itemWeight,
+            double contribution,
             Context context
     ) throws IOException, InterruptedException {
 
@@ -172,7 +136,7 @@ public class PairGenerationMapper extends Mapper<
                         behavior,
                         users[first],
                         users[second],
-                        itemWeight,
+                        contribution,
                         context
                 );
             }
@@ -188,7 +152,7 @@ public class PairGenerationMapper extends Mapper<
             ItemBehaviorWritable key,
             long[] originalUsers,
             int requestedMaxNeighbours,
-            double itemWeight,
+            double contribution,
             Context context
     ) throws IOException, InterruptedException {
 
@@ -203,7 +167,7 @@ public class PairGenerationMapper extends Mapper<
             emitAllPairs(
                     key.getBehavior(),
                     originalUsers,
-                    itemWeight,
+                    contribution,
                     context
             );
             return;
@@ -230,7 +194,6 @@ public class PairGenerationMapper extends Mapper<
         int symmetricOffsets = effectiveNeighbours / 2;
         long generatedPairs = 0L;
 
-        // Each offset contributes two neighbours per user and n unique edges.
         for (int offset = 1; offset <= symmetricOffsets; offset++) {
             for (int first = 0; first < degree; first++) {
                 int second = (first + offset) % degree;
@@ -238,14 +201,13 @@ public class PairGenerationMapper extends Mapper<
                         key.getBehavior(),
                         users[first],
                         users[second],
-                        itemWeight,
+                        contribution,
                         context
                 );
                 generatedPairs++;
             }
         }
 
-        // For even n, an antipodal matching adds one neighbour per user.
         if ((effectiveNeighbours & 1) == 1) {
             int half = degree / 2;
             for (int first = 0; first < half; first++) {
@@ -254,7 +216,7 @@ public class PairGenerationMapper extends Mapper<
                         key.getBehavior(),
                         users[first],
                         users[second],
-                        itemWeight,
+                        contribution,
                         context
                 );
                 generatedPairs++;
@@ -269,41 +231,28 @@ public class PairGenerationMapper extends Mapper<
             byte behavior,
             long firstUser,
             long secondUser,
-            double itemWeight,
+            double contribution,
             Context context
     ) throws IOException, InterruptedException {
 
         outputKey.set(firstUser, secondUser);
+        outputValue.set(contribution);
 
         if (behavior == ItemBehaviorWritable.BUY) {
-            outputValue.setBuyContribution(itemWeight);
             context.write(outputKey, outputValue);
             context.getCounter(PairCounters.GENERATED_BUY_PAIRS)
                     .increment(1L);
         } else if (behavior == ItemBehaviorWritable.PV) {
-            outputValue.setPvContribution(itemWeight);
             context.write(outputKey, outputValue);
             context.getCounter(PairCounters.GENERATED_PV_PAIRS)
                     .increment(1L);
         }
     }
 
-    private double computeItemWeight(byte behavior, int degree) {
-        if (!iufEnabled) {
-            return 1.0;
-        }
-
-        long totalUsersForBehavior = behavior == ItemBehaviorWritable.BUY
-                ? totalUsersBuy
-                : totalUsersPv;
-        double numerator = totalUsersForBehavior + iufSmoothing;
-        double denominator = degree + iufSmoothing;
-        double weight = Math.log(numerator / denominator);
-
-        if (!Double.isFinite(weight) || weight < 0.0) {
-            weight = 0.0;
-        }
-        return Math.min(weight, iufMaxWeight);
+    private double behaviorContribution(byte behavior) {
+        return behavior == ItemBehaviorWritable.BUY
+                ? buyBehaviorWeight
+                : pvBehaviorWeight;
     }
 
     private int exactLimitFor(byte behavior) {
@@ -337,6 +286,29 @@ public class PairGenerationMapper extends Mapper<
             ).increment(1L);
         }
     }
+
+    private static long numberOfPairs(int users) {
+        return ((long) users * (users - 1L)) / 2L;
+    }
+
+    private static void shuffle(long[] values, SplittableRandom random) {
+        for (int index = values.length - 1; index > 0; index--) {
+            int other = random.nextInt(index + 1);
+            long temporary = values[index];
+            values[index] = values[other];
+            values[other] = temporary;
+        }
+    }
+
+    private static long mix64(long value) {
+        value = (value ^ (value >>> 30))
+                * 0xBF58476D1CE4E5B9L;
+        value = (value ^ (value >>> 27))
+                * 0x94D049BB133111EBL;
+        value = value ^ (value >>> 31);
+        return value;
+    }
+}
 
     private static long numberOfPairs(int users) {
         return ((long) users * (users - 1L)) / 2L;
