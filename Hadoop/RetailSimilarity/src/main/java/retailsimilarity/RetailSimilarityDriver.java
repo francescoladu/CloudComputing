@@ -5,6 +5,7 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.compress.DefaultCodec;
@@ -29,7 +30,6 @@ import retailsimilarity.job3.TopKReducer;
 import retailsimilarity.writable.ItemBehaviorWritable;
 import retailsimilarity.writable.SimilarUserListWritable;
 import retailsimilarity.writable.SimilarUserWritable;
-import retailsimilarity.writable.SimilarityWritable;
 import retailsimilarity.writable.UserListWritable;
 import retailsimilarity.writable.UserPairWritable;
 
@@ -135,9 +135,9 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         job.setReducerClass(SimilarityReducer.class);
 
         job.setMapOutputKeyClass(UserPairWritable.class);
-        job.setMapOutputValueClass(SimilarityWritable.class);
+        job.setMapOutputValueClass(DoubleWritable.class);
         job.setOutputKeyClass(UserPairWritable.class);
-        job.setOutputValueClass(SimilarityWritable.class);
+        job.setOutputValueClass(DoubleWritable.class);
 
         job.setNumReduceTasks(getConf().getInt(
                 RetailSimilarityConfig.JOB2_REDUCERS,
@@ -147,8 +147,6 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         FileInputFormat.addInputPath(job, input);
         FileOutputFormat.setOutputPath(job, output);
 
-        // Job 2 is now a typed, compressed intermediate result consumed by
-        // Job 3, avoiding text parsing and loss of precision.
         configureSequenceFileOutput(job);
         enableMapOutputCompression(job);
         return job;
@@ -277,28 +275,28 @@ public class RetailSimilarityDriver extends Configured implements Tool {
                 1
         );
 
-        boolean iufEnabled = getConf().getBoolean(
-                RetailSimilarityConfig.IUF_ENABLED,
-                true
+        double buyBehaviorWeight = getConf().getDouble(
+                RetailSimilarityConfig.BUY_BEHAVIOR_WEIGHT,
+                RetailSimilarityConfig.DEFAULT_BUY_BEHAVIOR_WEIGHT
         );
-        if (iufEnabled) {
-            long totalUsersBuy = getConf().getLong(
-                    RetailSimilarityConfig.TOTAL_USERS_BUY,
-                    -1L
+        double pvBehaviorWeight = getConf().getDouble(
+                RetailSimilarityConfig.PV_BEHAVIOR_WEIGHT,
+                RetailSimilarityConfig.DEFAULT_PV_BEHAVIOR_WEIGHT
+        );
+        double minimumScore = getConf().getDouble(
+                RetailSimilarityConfig.MIN_SCORE,
+                RetailSimilarityConfig.DEFAULT_MIN_SCORE
+        );
+        if (buyBehaviorWeight < 0.0 || pvBehaviorWeight < 0.0) {
+            throw new IllegalArgumentException(
+                    "Behavior weights cannot be negative"
             );
-            long totalUsersPv = getConf().getLong(
-                    RetailSimilarityConfig.TOTAL_USERS_PV,
-                    -1L
+        }
+        if (minimumScore < 0.0) {
+            throw new IllegalArgumentException(
+                    RetailSimilarityConfig.MIN_SCORE
+                            + " must be non-negative"
             );
-            if (totalUsersBuy <= 0L || totalUsersPv <= 0L) {
-                throw new IllegalArgumentException(
-                        "When IUF is enabled, set -D"
-                                + RetailSimilarityConfig.TOTAL_USERS_BUY
-                                + "=<distinct-buy-user-count> and -D"
-                                + RetailSimilarityConfig.TOTAL_USERS_PV
-                                + "=<distinct-pv-user-count>"
-                );
-            }
         }
     }
 
@@ -351,7 +349,6 @@ public class RetailSimilarityDriver extends Configured implements Tool {
         printCounter(job, PairGenerationMapper.PairCounters.SAMPLED_BUY_POSTING_LISTS);
         printCounter(job, PairGenerationMapper.PairCounters.SAMPLED_PV_POSTING_LISTS);
         printCounter(job, SimilarityReducer.SimilarityCounters.EMITTED_PAIRS);
-        printCounter(job, SimilarityReducer.SimilarityCounters.FILTERED_BY_SUPPORT);
         printCounter(job, SimilarityReducer.SimilarityCounters.FILTERED_BY_SCORE);
     }
 
@@ -380,14 +377,22 @@ public class RetailSimilarityDriver extends Configured implements Tool {
                         + " [generic -D options] <input> <job1-output>"
                         + " <job2-output> <final-top-k-output>"
         );
-        System.err.println("Required when IUF is enabled:");
+        System.err.println("Behavior weight options:");
         System.err.println(
-                "  -D" + RetailSimilarityConfig.TOTAL_USERS_BUY
-                        + "=<number of distinct buy users>"
+                "  -D" + RetailSimilarityConfig.BUY_BEHAVIOR_WEIGHT
+                        + "=<weight> (default "
+                        + RetailSimilarityConfig.DEFAULT_BUY_BEHAVIOR_WEIGHT + ")"
         );
         System.err.println(
-                "  -D" + RetailSimilarityConfig.TOTAL_USERS_PV
-                        + "=<number of distinct pv users>"
+                "  -D" + RetailSimilarityConfig.PV_BEHAVIOR_WEIGHT
+                        + "=<weight> (default "
+                        + RetailSimilarityConfig.DEFAULT_PV_BEHAVIOR_WEIGHT + ")"
+        );
+        System.err.println("Score filter options:");
+        System.err.println(
+                "  -D" + RetailSimilarityConfig.MIN_SCORE
+                        + "=<threshold> (default "
+                        + RetailSimilarityConfig.DEFAULT_MIN_SCORE + ")"
         );
         System.err.println("Top-K options:");
         System.err.println(

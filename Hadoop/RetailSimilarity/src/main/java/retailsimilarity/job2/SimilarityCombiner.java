@@ -2,9 +2,9 @@ package retailsimilarity.job2;
 
 import java.io.IOException;
 
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.mapreduce.Reducer;
 
-import retailsimilarity.writable.SimilarityWritable;
 import retailsimilarity.writable.UserPairWritable;
 
 /**
@@ -12,39 +12,26 @@ import retailsimilarity.writable.UserPairWritable;
  */
 public class SimilarityCombiner extends Reducer<
         UserPairWritable,
-        SimilarityWritable,
+        DoubleWritable,
         UserPairWritable,
-        SimilarityWritable> {
+        DoubleWritable> {
 
-    private final SimilarityWritable outputValue =
-            new SimilarityWritable();
+    private final DoubleWritable outputValue =
+            new DoubleWritable();
 
     @Override
     protected void reduce(
             UserPairWritable key,
-            Iterable<SimilarityWritable> values,
+            Iterable<DoubleWritable> values,
             Context context
     ) throws IOException, InterruptedException {
 
-        long commonBuy = 0L;
-        long commonPv = 0L;
-        double weightedBuy = 0.0;
-        double weightedPv = 0.0;
-
-        for (SimilarityWritable value : values) {
-            commonBuy += value.getCommonBuyItems();
-            commonPv += value.getCommonPvItems();
-            weightedBuy += value.getWeightedBuy();
-            weightedPv += value.getWeightedPv();
+        double totalContribution = 0.0;
+        for (DoubleWritable value : values) {
+            totalContribution += value.get();
         }
 
-        outputValue.set(
-                commonBuy,
-                commonPv,
-                weightedBuy,
-                weightedPv,
-                0.0
-        );
+        outputValue.set(totalContribution);
         context.write(key, outputValue);
     }
 }
