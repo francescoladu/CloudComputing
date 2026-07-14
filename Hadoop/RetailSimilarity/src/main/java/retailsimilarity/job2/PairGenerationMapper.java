@@ -309,25 +309,3 @@ public class PairGenerationMapper extends Mapper<
         return value;
     }
 }
-
-    private static long numberOfPairs(int users) {
-        return ((long) users * (users - 1L)) / 2L;
-    }
-
-    private static void shuffle(long[] values, SplittableRandom random) {
-        for (int index = values.length - 1; index > 0; index--) {
-            int other = random.nextInt(index + 1);
-            long temporary = values[index];
-            values[index] = values[other];
-            values[other] = temporary;
-        }
-    }
-
-    private static long mix64(long value) {
-        value = (value ^ (value >>> 30))
-                * 0xBF58476D1CE4E5B9L;
-        value = (value ^ (value >>> 27))
-                * 0x94D049BB133111EBL;
-        return value ^ (value >>> 31);
-    }
-}
