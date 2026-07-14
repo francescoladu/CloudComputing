@@ -34,16 +34,29 @@ ssh root@10.1.1.112 'mkdir -p /root/retail_similarity/dataset'
 
 
 E Copiamo tutti i files 
+cd ../job1
 <scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/job1/>
 
 cd ../job2
 scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/job2/
+
+cd ../job3
+scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/job3/
+
 
 cd ../writable
 scp *.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/writable/
 
 cd ..
 scp RetailSimilarityDriver.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/
+
+scp RetailSimilarityDriver.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/
+
+
+
+
+
+scp RetailSimilarityConfig.java root@10.1.1.112:/root/retail_similarity/hadoop-retail/src/main/java/retailsimilarity/
 
 scp Spark/RetailSimilarity.py root@10.1.1.112:/root/retail_similarity/spark/
 
